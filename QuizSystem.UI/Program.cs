@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using QuizSystem.UI.Auth;
+using QuizSystem.UI.Components;
 using QuizSystem.UI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
