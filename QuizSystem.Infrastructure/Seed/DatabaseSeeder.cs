@@ -19,7 +19,7 @@ public static class DatabaseSeeder
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
 
-        var hasMigrations = (await dbContext.Database.GetMigrationsAsync(cancellationToken)).Any();
+        var hasMigrations = dbContext.Database.GetMigrations().Any();
         if (hasMigrations)
         {
             await dbContext.Database.MigrateAsync(cancellationToken);
