@@ -1,0 +1,69 @@
+@page "/admin/overview"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Admin Overview</PageTitle>
+
+<section class="card">
+    <h1>System Overview</h1>
+
+    @if (_overview is null)
+    {
+        <div class="skeleton">Loading overview...</div>
+    }
+    else
+    {
+        <div class="stats-grid">
+            <article class="stat-card">
+                <span>Total Users</span>
+                <strong>@_overview.TotalUsers</strong>
+            </article>
+            <article class="stat-card">
+                <span>Total Quizzes</span>
+                <strong>@_overview.TotalQuizzes</strong>
+            </article>
+            <article class="stat-card">
+                <span>Total Attempts</span>
+                <strong>@_overview.TotalAttempts</strong>
+            </article>
+            <article class="stat-card">
+                <span>Average Score</span>
+                <strong>@_overview.AverageScorePercentage.ToString("0.00")%</strong>
+            </article>
+        </div>
+    }
+
+    <h3>Recent Attempts</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Quiz</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Submitted</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var attempt in _attempts.Take(10))
+            {
+                <tr>
+                    <td>@attempt.QuizTitle</td>
+                    <td>@attempt.Status</td>
+                    <td>@attempt.Score / @attempt.MaxScore (@attempt.Percentage.ToString("0.00")%)</td>
+                    <td>@(attempt.SubmittedAtUtc?.ToLocalTime().ToString("g") ?? "-")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private AdminOverviewDto? _overview;
+    private IReadOnlyCollection<AttemptResultDto> _attempts = Array.Empty<AttemptResultDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _overview = await ApiClient.GetAdminOverviewAsync();
+        _attempts = await ApiClient.GetAllAttemptsAsync();
+    }
+}

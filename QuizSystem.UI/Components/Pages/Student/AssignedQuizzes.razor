@@ -1,0 +1,62 @@
+@page "/student/quizzes"
+@attribute [Authorize(Roles = AppRoles.Student)]
+@inject QuizApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>Student - Assigned Quizzes</PageTitle>
+
+<section class="card">
+    <h1>Assigned Quizzes</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Duration</th>
+                <th>Attempts</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var quiz in _quizzes)
+            {
+                <tr>
+                    <td>@quiz.Title</td>
+                    <td>@quiz.DurationMinutes min</td>
+                    <td>@quiz.AttemptLimit</td>
+                    <td>
+                        <button class="btn btn-primary" @onclick="() => StartAttemptAsync(quiz.Id)">Start</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private IReadOnlyCollection<QuizDto> _quizzes = Array.Empty<QuizDto>();
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _quizzes = await ApiClient.GetAssignedQuizzesAsync();
+    }
+
+    private async Task StartAttemptAsync(Guid quizId)
+    {
+        try
+        {
+            var attempt = await ApiClient.StartAttemptAsync(quizId);
+            Navigation.NavigateTo($"/student/attempt/{attempt.AttemptId}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

@@ -1,0 +1,177 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Admin - Users</PageTitle>
+
+<section class="card">
+    <h1>User & Role Management</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+
+    <div class="grid-two">
+        <div>
+            <h3>Create User</h3>
+            <EditForm Model="_create" OnValidSubmit="CreateUserAsync">
+                <div class="form-grid">
+                    <label>Email</label>
+                    <InputText class="input" @bind-Value="_create.Email" />
+
+                    <label>Full Name</label>
+                    <InputText class="input" @bind-Value="_create.FullName" />
+
+                    <label>Password</label>
+                    <InputText class="input" @bind-Value="_create.Password" Type="password" />
+
+                    <label>Role</label>
+                    <select class="input" @bind="_selectedRoleForCreate">
+                        @foreach (var role in _roles)
+                        {
+                            <option value="@role.Name">@role.Name</option>
+                        }
+                    </select>
+
+                    <button class="btn btn-primary" type="submit">Create</button>
+                </div>
+            </EditForm>
+        </div>
+
+        <div>
+            <h3>Assign Role</h3>
+            <div class="form-grid">
+                <label>User</label>
+                <select class="input" @bind="_selectedUserForRole">
+                    <option value="">Select user</option>
+                    @foreach (var user in _users)
+                    {
+                        <option value="@user.Id">@user.Email</option>
+                    }
+                </select>
+
+                <label>Role</label>
+                <select class="input" @bind="_selectedRoleForAssign">
+                    @foreach (var role in _roles)
+                    {
+                        <option value="@role.Name">@role.Name</option>
+                    }
+                </select>
+
+                <button class="btn btn-secondary" @onclick="AssignRoleAsync">Assign Role</button>
+            </div>
+        </div>
+    </div>
+
+    <h3>Users</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Roles</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in _users)
+            {
+                <tr>
+                    <td>@user.FullName</td>
+                    <td>@user.Email</td>
+                    <td>@string.Join(", ", user.Roles)</td>
+                    <td>@(user.IsLocked ? "Locked" : "Active")</td>
+                    <td>
+                        <button class="btn btn-ghost" @onclick="() => ToggleLockAsync(user)">@((user.IsLocked) ? "Unlock" : "Lock")</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private IReadOnlyCollection<UserDto> _users = Array.Empty<UserDto>();
+    private IReadOnlyCollection<RoleDto> _roles = Array.Empty<RoleDto>();
+    private readonly CreateUserRequest _create = new();
+    private string _selectedRoleForCreate = AppRoles.Student;
+    private Guid? _selectedUserForRole;
+    private string _selectedRoleForAssign = AppRoles.Student;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        try
+        {
+            _users = await ApiClient.GetUsersAsync();
+            _roles = await ApiClient.GetRolesAsync();
+            _selectedRoleForCreate = _roles.FirstOrDefault()?.Name ?? AppRoles.Student;
+            _selectedRoleForAssign = _roles.FirstOrDefault()?.Name ?? AppRoles.Student;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        try
+        {
+            _create.Roles = new[] { _selectedRoleForCreate };
+            await ApiClient.CreateUserAsync(_create);
+            _create.Email = string.Empty;
+            _create.Password = string.Empty;
+            _create.FullName = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AssignRoleAsync()
+    {
+        if (_selectedUserForRole is null)
+        {
+            _error = "Select a user first.";
+            return;
+        }
+
+        try
+        {
+            await ApiClient.AssignRoleAsync(new AssignRoleRequest
+            {
+                UserId = _selectedUserForRole.Value,
+                Role = _selectedRoleForAssign
+            });
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ToggleLockAsync(UserDto user)
+    {
+        try
+        {
+            await ApiClient.LockUserAsync(user.Id, !user.IsLocked);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

@@ -1,0 +1,40 @@
+@page "/student/results"
+@attribute [Authorize(Roles = AppRoles.Student)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Student - Results</PageTitle>
+
+<section class="card">
+    <h1>Attempt Results</h1>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Quiz</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Submitted</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var result in _results)
+            {
+                <tr>
+                    <td>@result.QuizTitle</td>
+                    <td>@result.Status</td>
+                    <td>@result.Score / @result.MaxScore (@result.Percentage.ToString("0.00")%)</td>
+                    <td>@(result.SubmittedAtUtc?.ToLocalTime().ToString("g") ?? "-")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private IReadOnlyCollection<AttemptResultDto> _results = Array.Empty<AttemptResultDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _results = await ApiClient.GetMyAttemptsAsync();
+    }
+}

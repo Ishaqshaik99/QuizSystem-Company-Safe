@@ -1,0 +1,25 @@
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    <LayoutView Layout="typeof(Layout.MainLayout)">
+                        <div class="empty-state">
+                            <h3>Access denied</h3>
+                            <p>You do not have permission to view this page.</p>
+                            <a class="btn btn-primary" href="/login">Go to login</a>
+                        </div>
+                    </LayoutView>
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="typeof(Layout.MainLayout)">
+                <div class="empty-state">
+                    <h3>Page not found</h3>
+                </div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

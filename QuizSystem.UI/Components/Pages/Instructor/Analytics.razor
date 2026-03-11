@@ -1,0 +1,174 @@
+@page "/instructor/analytics"
+@attribute [Authorize(Roles = AppRoles.Instructor)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Instructor - Analytics</PageTitle>
+
+<section class="card">
+    <h1>Quiz Analytics</h1>
+
+    <div class="form-inline">
+        <select class="input" @bind="_selectedQuizId">
+            <option value="">Select quiz</option>
+            @foreach (var quiz in _quizzes)
+            {
+                <option value="@quiz.Id">@quiz.Title</option>
+            }
+        </select>
+        <button class="btn btn-primary" @onclick="LoadAnalyticsAsync">Load</button>
+    </div>
+
+    @if (_analytics is null)
+    {
+        <div class="empty-state">Select a quiz to view analytics.</div>
+    }
+    else
+    {
+        <div class="stats-grid">
+            <article class="stat-card"><span>Attempts</span><strong>@_analytics.AttemptCount</strong></article>
+            <article class="stat-card"><span>Average</span><strong>@_analytics.AverageScore.ToString("0.00")%</strong></article>
+            <article class="stat-card"><span>Min</span><strong>@_analytics.MinScore.ToString("0.00")%</strong></article>
+            <article class="stat-card"><span>Max</span><strong>@_analytics.MaxScore.ToString("0.00")%</strong></article>
+        </div>
+
+        <h3>Score Distribution</h3>
+        <div class="chip-row">
+            @foreach (var bin in _analytics.ScoreDistribution)
+            {
+                <span class="chip">@bin.RangeLabel : @bin.Count</span>
+            }
+        </div>
+
+        <h3>Topic Performance</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Total</th>
+                    <th>Correct</th>
+                    <th>Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var topic in _analytics.TopicPerformance)
+                {
+                    <tr>
+                        <td>@topic.TopicName</td>
+                        <td>@topic.TotalQuestions</td>
+                        <td>@topic.CorrectAnswers</td>
+                        <td>@topic.Accuracy.ToString("0.00")%</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h3>Question Performance</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Question</th>
+                    <th>Correct Rate</th>
+                    <th>Common Wrong Options</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var q in _analytics.QuestionPerformance)
+                {
+                    <tr>
+                        <td>@q.Stem</td>
+                        <td>@q.CorrectRate.ToString("0.00")%</td>
+                        <td>@string.Join(" | ", q.CommonWrongOptions.Select(x => $"{x.Key}:{x.Value}"))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h3>Attempts (For Manual Grading)</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Attempt ID</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                    <th>Short Answers Pending</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var attempt in _attempts)
+                {
+                    <tr>
+                        <td>@attempt.AttemptId</td>
+                        <td>@attempt.Score / @attempt.MaxScore (@attempt.Percentage.ToString("0.00")%)</td>
+                        <td>@attempt.Status</td>
+                        <td>@attempt.Answers.Count(a => a.RequiresManualGrading && a.IsCorrect is null)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h3>Manual Grade Short Answer</h3>
+        <div class="form-grid">
+            <label>Attempt ID</label>
+            <InputText class="input" @bind-Value="_gradeAttemptIdRaw" />
+
+            <label>Question ID</label>
+            <InputText class="input" @bind-Value="_gradeQuestionIdRaw" />
+
+            <label>Awarded Score</label>
+            <InputNumber class="input" @bind-Value="_gradeRequest.AwardedScore" />
+
+            <label>Is Correct</label>
+            <InputCheckbox class="check" @bind-Value="_gradeRequest.IsCorrect" />
+
+            <label>Notes</label>
+            <InputTextArea class="input" @bind-Value="_gradeRequest.Notes" />
+
+            <button class="btn btn-secondary" @onclick="GradeAsync">Submit Grade</button>
+        </div>
+    }
+</section>
+
+@code {
+    private IReadOnlyCollection<QuizDto> _quizzes = Array.Empty<QuizDto>();
+    private IReadOnlyCollection<AttemptResultDto> _attempts = Array.Empty<AttemptResultDto>();
+    private Guid? _selectedQuizId;
+    private InstructorQuizAnalyticsDto? _analytics;
+    private readonly ManualGradeRequest _gradeRequest = new();
+    private string _gradeAttemptIdRaw = string.Empty;
+    private string _gradeQuestionIdRaw = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _quizzes = await ApiClient.GetInstructorQuizzesAsync();
+    }
+
+    private async Task LoadAnalyticsAsync()
+    {
+        if (_selectedQuizId is null)
+        {
+            _analytics = null;
+            _attempts = Array.Empty<AttemptResultDto>();
+            return;
+        }
+
+        _analytics = await ApiClient.GetQuizAnalyticsAsync(_selectedQuizId.Value);
+        _attempts = await ApiClient.GetAttemptsByQuizAsync(_selectedQuizId.Value);
+    }
+
+    private async Task GradeAsync()
+    {
+        if (!Guid.TryParse(_gradeAttemptIdRaw, out var attemptId) || !Guid.TryParse(_gradeQuestionIdRaw, out var questionId))
+        {
+            return;
+        }
+
+        _gradeRequest.QuestionId = questionId;
+        await ApiClient.GradeShortAnswerAsync(attemptId, _gradeRequest);
+
+        if (_selectedQuizId.HasValue)
+        {
+            _analytics = await ApiClient.GetQuizAnalyticsAsync(_selectedQuizId.Value);
+            _attempts = await ApiClient.GetAttemptsByQuizAsync(_selectedQuizId.Value);
+        }
+    }
+}

@@ -1,0 +1,66 @@
+@page "/student/dashboard"
+@attribute [Authorize(Roles = AppRoles.Student)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Student - Dashboard</PageTitle>
+
+<section class="card">
+    <h1>Performance Dashboard</h1>
+
+    @if (_dashboard is null)
+    {
+        <div class="skeleton">Loading dashboard...</div>
+    }
+    else
+    {
+        <div class="stats-grid">
+            <article class="stat-card">
+                <span>Overall Accuracy</span>
+                <strong>@_dashboard.OverallAccuracy.ToString("0.00")%</strong>
+            </article>
+        </div>
+
+        <h3>Topic-wise Performance</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Total</th>
+                    <th>Correct</th>
+                    <th>Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var topic in _dashboard.TopicWise)
+                {
+                    <tr>
+                        <td>@topic.TopicName</td>
+                        <td>@topic.TotalQuestions</td>
+                        <td>@topic.CorrectAnswers</td>
+                        <td>@topic.Accuracy.ToString("0.00")%</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h3>Improvement Trend</h3>
+        <div class="trend-strip">
+            @foreach (var point in _dashboard.Trend)
+            {
+                <div class="trend-point">
+                    <strong>@point.Percentage.ToString("0")%</strong>
+                    <span>@point.AttemptDateUtc.ToLocalTime().ToString("dd MMM")</span>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private StudentDashboardDto? _dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dashboard = await ApiClient.GetStudentDashboardAsync();
+    }
+}

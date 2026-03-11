@@ -1,0 +1,271 @@
+@page "/instructor/quizzes"
+@attribute [Authorize(Roles = AppRoles.Instructor)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Instructor - Quizzes</PageTitle>
+
+<section class="card">
+    <h1>Quiz Builder</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+
+    <div class="grid-two">
+        <div>
+            <h3>Create Quiz</h3>
+            <EditForm Model="_newQuiz" OnValidSubmit="CreateQuizAsync">
+                <div class="form-grid">
+                    <label>Title</label>
+                    <InputText class="input" @bind-Value="_newQuiz.Title" />
+
+                    <label>Description</label>
+                    <InputTextArea class="input" @bind-Value="_newQuiz.Description" />
+
+                    <label>Duration (minutes)</label>
+                    <InputNumber class="input" @bind-Value="_newQuiz.DurationMinutes" />
+
+                    <label>Attempt Limit</label>
+                    <InputNumber class="input" @bind-Value="_newQuiz.AttemptLimit" />
+
+                    <label>Pass %</label>
+                    <InputNumber class="input" @bind-Value="_newQuiz.PassPercentage" />
+
+                    <label>Autosave (seconds)</label>
+                    <InputNumber class="input" @bind-Value="_newQuiz.AutoSaveIntervalSeconds" />
+
+                    <label>Shuffle Questions</label>
+                    <InputCheckbox class="check" @bind-Value="_newQuiz.ShuffleQuestions" />
+
+                    <label>Shuffle Options</label>
+                    <InputCheckbox class="check" @bind-Value="_newQuiz.ShuffleOptions" />
+
+                    <label>Negative Marking</label>
+                    <InputCheckbox class="check" @bind-Value="_newQuiz.NegativeMarkingEnabled" />
+
+                    <label>Question IDs (comma-separated)</label>
+                    <InputTextArea class="input" @bind-Value="_questionIdsRaw" />
+
+                    <button class="btn btn-primary" type="submit">Create Quiz</button>
+                </div>
+            </EditForm>
+        </div>
+
+        <div>
+            <h3>Assign Quiz</h3>
+            <div class="form-grid">
+                <label>Quiz</label>
+                <select class="input" @bind="_assignQuizId">
+                    <option value="">Select quiz</option>
+                    @foreach (var quiz in _quizzes)
+                    {
+                        <option value="@quiz.Id">@quiz.Title</option>
+                    }
+                </select>
+
+                <label>Student IDs (comma-separated)</label>
+                <InputTextArea class="input" @bind-Value="_assignStudentIdsRaw" />
+
+                <label>Group IDs (comma-separated)</label>
+                <InputTextArea class="input" @bind-Value="_assignGroupIdsRaw" />
+
+                <label>Due Date (UTC)</label>
+                <InputDate class="input" @bind-Value="_assignDueDate" />
+
+                <button class="btn btn-secondary" @onclick="AssignQuizAsync">Assign</button>
+            </div>
+
+            <h3>Create Group</h3>
+            <div class="form-grid">
+                <label>Group Name</label>
+                <InputText class="input" @bind-Value="_groupName" />
+
+                <label>Student IDs (comma-separated)</label>
+                <InputTextArea class="input" @bind-Value="_groupStudentIdsRaw" />
+
+                <button class="btn btn-ghost" @onclick="CreateGroupAsync">Create Group</button>
+            </div>
+        </div>
+    </div>
+
+    <h3>My Quizzes</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Published</th>
+                <th>Duration</th>
+                <th>Questions</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var quiz in _quizzes)
+            {
+                <tr>
+                    <td>@quiz.Title</td>
+                    <td>@(quiz.IsPublished ? "Yes" : "No")</td>
+                    <td>@quiz.DurationMinutes min</td>
+                    <td>@quiz.Questions.Count</td>
+                    <td>
+                        @if (!quiz.IsPublished)
+                        {
+                            <button class="btn btn-ghost" @onclick="() => PublishAsync(quiz.Id)">Publish</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h3>Groups</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Students</th>
+                <th>Group ID</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var g in _groups)
+            {
+                <tr>
+                    <td>@g.Name</td>
+                    <td>@g.StudentIds.Count</td>
+                    <td>@g.Id</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private readonly QuizCreateUpdateRequest _newQuiz = new()
+    {
+        DurationMinutes = 30,
+        AttemptLimit = 1,
+        PassPercentage = 40,
+        AutoSaveIntervalSeconds = 15,
+        ShuffleQuestions = true,
+        ShuffleOptions = true
+    };
+
+    private IReadOnlyCollection<QuizDto> _quizzes = Array.Empty<QuizDto>();
+    private IReadOnlyCollection<GroupClassDto> _groups = Array.Empty<GroupClassDto>();
+
+    private string _questionIdsRaw = string.Empty;
+    private Guid? _assignQuizId;
+    private string _assignStudentIdsRaw = string.Empty;
+    private string _assignGroupIdsRaw = string.Empty;
+    private DateTime? _assignDueDate;
+    private string _groupName = string.Empty;
+    private string _groupStudentIdsRaw = string.Empty;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _quizzes = await ApiClient.GetInstructorQuizzesAsync();
+        _groups = await ApiClient.GetGroupsAsync();
+    }
+
+    private async Task CreateQuizAsync()
+    {
+        try
+        {
+            var questionIds = ParseGuids(_questionIdsRaw).ToList();
+            _newQuiz.Questions = questionIds.Select((id, index) => new QuizQuestionInputDto
+            {
+                QuestionId = id,
+                OrderIndex = index + 1,
+                Marks = 1,
+                NegativeMarks = _newQuiz.NegativeMarkingEnabled ? 0.25m : 0
+            }).ToList();
+
+            await ApiClient.CreateQuizAsync(_newQuiz);
+            _newQuiz.Title = string.Empty;
+            _newQuiz.Description = string.Empty;
+            _questionIdsRaw = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task PublishAsync(Guid quizId)
+    {
+        try
+        {
+            await ApiClient.PublishQuizAsync(quizId);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AssignQuizAsync()
+    {
+        if (_assignQuizId is null)
+        {
+            _error = "Select a quiz.";
+            return;
+        }
+
+        try
+        {
+            await ApiClient.AssignQuizAsync(new AssignQuizRequest
+            {
+                QuizId = _assignQuizId.Value,
+                StudentIds = ParseGuids(_assignStudentIdsRaw).ToList(),
+                GroupClassIds = ParseGuids(_assignGroupIdsRaw).ToList(),
+                DueAtUtc = _assignDueDate?.ToUniversalTime()
+            });
+            _assignStudentIdsRaw = string.Empty;
+            _assignGroupIdsRaw = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task CreateGroupAsync()
+    {
+        try
+        {
+            await ApiClient.CreateGroupAsync(new GroupClassCreateRequest
+            {
+                Name = _groupName,
+                StudentIds = ParseGuids(_groupStudentIdsRaw).ToList()
+            });
+
+            _groupName = string.Empty;
+            _groupStudentIdsRaw = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static IReadOnlyCollection<Guid> ParseGuids(string raw)
+    {
+        return raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => Guid.TryParse(x, out var id) ? id : Guid.Empty)
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+    }
+}

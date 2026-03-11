@@ -1,0 +1,271 @@
+@page "/student/attempt/{AttemptId:guid}"
+@attribute [Authorize(Roles = AppRoles.Student)]
+@implements IAsyncDisposable
+@inject QuizApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>Student - Attempt</PageTitle>
+
+@if (_session is null)
+{
+    <section class="card">
+        <div class="skeleton">Loading attempt session...</div>
+    </section>
+}
+else
+{
+    <section class="card">
+        <div class="header-row">
+            <div>
+                <h1>@_session.QuizTitle</h1>
+                <p class="subtle">Autosave every @_session.AutoSaveIntervalSeconds seconds</p>
+            </div>
+            <div class="timer-pill @(_remainingSeconds <= 30 ? "timer-danger" : string.Empty)">
+                Time left: @TimeSpan.FromSeconds(_remainingSeconds).ToString("mm\\:ss")
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert alert-error">@_error</div>
+        }
+
+        @foreach (var question in _session.Questions)
+        {
+            <article class="question-card">
+                <header>
+                    <h3>@question.Stem</h3>
+                    <span class="subtle">@question.Type | Marks: @question.Marks</span>
+                </header>
+
+                @if (question.Type == QuestionType.McqSingle || question.Type == QuestionType.TrueFalse)
+                {
+                    @foreach (var option in question.Options)
+                    {
+                        <label class="option-row">
+                            <input type="radio"
+                                   name="@question.QuestionId"
+                                   checked="@(GetSelectedOptions(question.QuestionId).Contains(option.OptionId))"
+                                   @onchange="() => SelectSingleOption(question.QuestionId, option.OptionId)" />
+                            @option.Text
+                        </label>
+                    }
+                }
+                else if (question.Type == QuestionType.McqMultiple)
+                {
+                    @foreach (var option in question.Options)
+                    {
+                        <label class="option-row">
+                            <input type="checkbox"
+                                   checked="@(GetSelectedOptions(question.QuestionId).Contains(option.OptionId))"
+                                   @onchange="(e) => ToggleMultiOption(question.QuestionId, option.OptionId, e.Value is bool b && b)" />
+                            @option.Text
+                        </label>
+                    }
+                }
+                else
+                {
+                    <textarea class="input"
+                              placeholder="Write your short answer"
+                              value="@GetShortAnswer(question.QuestionId)"
+                              @onchange="(e) => SetShortAnswer(question.QuestionId, e.Value?.ToString())"></textarea>
+                }
+            </article>
+        }
+
+        <div class="actions-row">
+            <button class="btn btn-secondary" @onclick="SaveAllDirtyAsync">Save Now</button>
+            <button class="btn btn-primary" @onclick="SubmitAsync">Submit Attempt</button>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public Guid AttemptId { get; set; }
+
+    private AttemptSessionDto? _session;
+    private readonly Dictionary<Guid, SaveAnswerRequest> _answers = new();
+    private readonly HashSet<Guid> _dirtyQuestionIds = new();
+    private CancellationTokenSource? _loopCts;
+    private int _remainingSeconds;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _session = await ApiClient.GetAttemptSessionAsync(AttemptId);
+        if (_session is null)
+        {
+            _error = "Attempt is not active. It may already be submitted.";
+            return;
+        }
+
+        _remainingSeconds = _session.RemainingSeconds;
+        _loopCts = new CancellationTokenSource();
+        _ = Task.Run(() => CountdownLoopAsync(_loopCts.Token));
+        _ = Task.Run(() => AutoSaveLoopAsync(_loopCts.Token));
+    }
+
+    private IReadOnlyCollection<Guid> GetSelectedOptions(Guid questionId)
+    {
+        if (_answers.TryGetValue(questionId, out var answer) && answer.SelectedOptionIds is not null)
+        {
+            return answer.SelectedOptionIds;
+        }
+
+        return Array.Empty<Guid>();
+    }
+
+    private string GetShortAnswer(Guid questionId)
+    {
+        return _answers.TryGetValue(questionId, out var answer)
+            ? answer.ShortAnswerText ?? string.Empty
+            : string.Empty;
+    }
+
+    private void SelectSingleOption(Guid questionId, Guid optionId)
+    {
+        _answers[questionId] = new SaveAnswerRequest
+        {
+            QuestionId = questionId,
+            SelectedOptionIds = new[] { optionId }
+        };
+        _dirtyQuestionIds.Add(questionId);
+    }
+
+    private void ToggleMultiOption(Guid questionId, Guid optionId, bool selected)
+    {
+        var existing = GetSelectedOptions(questionId).ToHashSet();
+        if (selected)
+        {
+            existing.Add(optionId);
+        }
+        else
+        {
+            existing.Remove(optionId);
+        }
+
+        _answers[questionId] = new SaveAnswerRequest
+        {
+            QuestionId = questionId,
+            SelectedOptionIds = existing.ToList()
+        };
+        _dirtyQuestionIds.Add(questionId);
+    }
+
+    private void SetShortAnswer(Guid questionId, string? answer)
+    {
+        _answers[questionId] = new SaveAnswerRequest
+        {
+            QuestionId = questionId,
+            ShortAnswerText = answer
+        };
+        _dirtyQuestionIds.Add(questionId);
+    }
+
+    private async Task AutoSaveLoopAsync(CancellationToken cancellationToken)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(_session.AutoSaveIntervalSeconds));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await SaveAllDirtyAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task CountdownLoopAsync(CancellationToken cancellationToken)
+    {
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _remainingSeconds = Math.Max(0, _remainingSeconds - 1);
+
+                await InvokeAsync(StateHasChanged);
+
+                if (_remainingSeconds == 0)
+                {
+                    await InvokeAsync(async () => await AutoSubmitAsync());
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task SaveAllDirtyAsync()
+    {
+        if (_dirtyQuestionIds.Count == 0)
+        {
+            return;
+        }
+
+        var questionIds = _dirtyQuestionIds.ToList();
+
+        foreach (var questionId in questionIds)
+        {
+            if (!_answers.TryGetValue(questionId, out var answer))
+            {
+                continue;
+            }
+
+            try
+            {
+                await ApiClient.SaveAnswerAsync(AttemptId, answer);
+                _dirtyQuestionIds.Remove(questionId);
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+                break;
+            }
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        await SaveAllDirtyAsync();
+        var result = await ApiClient.SubmitAttemptAsync(AttemptId, forceSubmit: false);
+        Navigation.NavigateTo($"/student/results?attemptId={result.AttemptId}", true);
+    }
+
+    private async Task AutoSubmitAsync()
+    {
+        try
+        {
+            await SaveAllDirtyAsync();
+            var result = await ApiClient.SubmitAttemptAsync(AttemptId, forceSubmit: true);
+            Navigation.NavigateTo($"/student/results?attemptId={result.AttemptId}", true);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_loopCts is not null)
+        {
+            await _loopCts.CancelAsync();
+            _loopCts.Dispose();
+            _loopCts = null;
+        }
+    }
+}

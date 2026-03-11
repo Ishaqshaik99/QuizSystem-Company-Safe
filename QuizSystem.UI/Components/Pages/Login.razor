@@ -1,0 +1,70 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@inject QuizApiClient ApiClient
+@inject NavigationManager Navigation
+@inject JwtAuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Login</PageTitle>
+
+<section class="card card-narrow">
+    <h1>Sign in</h1>
+    <p class="subtle">Use seeded credentials from docs.</p>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="HandleLoginAsync">
+        <DataAnnotationsValidator />
+        <div class="form-grid">
+            <label>Email</label>
+            <InputText @bind-Value="_model.Email" class="input" />
+
+            <label>Password</label>
+            <InputText @bind-Value="_model.Password" class="input" Type="password" />
+
+            <button class="btn btn-primary" type="submit" disabled="@_isBusy">@(_isBusy ? "Signing in..." : "Sign in")</button>
+        </div>
+    </EditForm>
+</section>
+
+@code {
+    private LoginRequest _model = new();
+    private bool _isBusy;
+    private string? _error;
+
+    private async Task HandleLoginAsync()
+    {
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var auth = await ApiClient.LoginAsync(_model);
+            await AuthStateProvider.MarkUserAsAuthenticatedAsync(auth.AccessToken);
+
+            if (auth.User.Roles.Contains(AppRoles.Admin))
+            {
+                Navigation.NavigateTo("/admin/users", true);
+                return;
+            }
+
+            if (auth.User.Roles.Contains(AppRoles.Instructor))
+            {
+                Navigation.NavigateTo("/instructor/quizzes", true);
+                return;
+            }
+
+            Navigation.NavigateTo("/student/quizzes", true);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+}

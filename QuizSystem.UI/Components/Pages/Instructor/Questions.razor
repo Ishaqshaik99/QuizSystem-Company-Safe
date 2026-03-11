@@ -1,0 +1,154 @@
+@page "/instructor/questions"
+@attribute [Authorize(Roles = AppRoles.Instructor)]
+@inject QuizApiClient ApiClient
+
+<PageTitle>Instructor - Questions</PageTitle>
+
+<section class="card">
+    <h1>Question Bank</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+
+    <EditForm Model="_newQuestion" OnValidSubmit="CreateQuestionAsync">
+        <div class="form-grid">
+            <label>Question Stem</label>
+            <InputTextArea class="input" @bind-Value="_newQuestion.Stem" />
+
+            <label>Type</label>
+            <select class="input" @bind="_newQuestion.Type">
+                <option value="@QuestionType.McqSingle">MCQ Single</option>
+                <option value="@QuestionType.McqMultiple">MCQ Multiple</option>
+                <option value="@QuestionType.TrueFalse">True / False</option>
+                <option value="@QuestionType.ShortAnswer">Short Answer</option>
+            </select>
+
+            <label>Topic</label>
+            <InputText class="input" @bind-Value="_newQuestion.TopicName" />
+
+            <label>Difficulty</label>
+            <select class="input" @bind="_newQuestion.Difficulty">
+                <option value="@DifficultyLevel.Easy">Easy</option>
+                <option value="@DifficultyLevel.Medium">Medium</option>
+                <option value="@DifficultyLevel.Hard">Hard</option>
+            </select>
+
+            @if (_newQuestion.Type == QuestionType.ShortAnswer)
+            {
+                <label>Expected Answer (optional)</label>
+                <InputText class="input" @bind-Value="_newQuestion.ShortAnswerExpectedAnswer" />
+
+                <label>Auto Check</label>
+                <InputCheckbox class="check" @bind-Value="_newQuestion.ShortAnswerAutoCheckEnabled" />
+            }
+            else
+            {
+                <label>Allow Partial Scoring</label>
+                <InputCheckbox class="check" @bind-Value="_newQuestion.AllowPartialScoring" />
+
+                <label>Options (one per line, prefix with * for correct)</label>
+                <InputTextArea class="input" @bind-Value="_optionsRaw" />
+            }
+
+            <button class="btn btn-primary" type="submit">Add Question</button>
+        </div>
+    </EditForm>
+
+    <h3>My Questions</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Stem</th>
+                <th>Type</th>
+                <th>Topic</th>
+                <th>Difficulty</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var question in _questions)
+            {
+                <tr>
+                    <td>@question.Stem</td>
+                    <td>@question.Type</td>
+                    <td>@question.TopicName</td>
+                    <td>@question.Difficulty</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private PagedResult<QuestionDto> _questionPage = new();
+    private IReadOnlyCollection<QuestionDto> _questions => _questionPage.Items;
+    private readonly QuestionCreateUpdateRequest _newQuestion = new()
+    {
+        Type = QuestionType.McqSingle,
+        Difficulty = DifficultyLevel.Medium,
+        AllowPartialScoring = true
+    };
+    private string _optionsRaw = "*Option A\nOption B";
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadQuestionsAsync();
+    }
+
+    private async Task LoadQuestionsAsync()
+    {
+        _questionPage = await ApiClient.GetQuestionsAsync();
+    }
+
+    private async Task CreateQuestionAsync()
+    {
+        _error = null;
+
+        try
+        {
+            if (_newQuestion.Type != QuestionType.ShortAnswer)
+            {
+                _newQuestion.Options = ParseOptions(_optionsRaw);
+            }
+            else
+            {
+                _newQuestion.Options = Array.Empty<QuestionOptionDto>();
+            }
+
+            await ApiClient.CreateQuestionAsync(_newQuestion);
+
+            _newQuestion.Stem = string.Empty;
+            _newQuestion.TopicName = string.Empty;
+            _newQuestion.ShortAnswerExpectedAnswer = string.Empty;
+            _optionsRaw = "*Option A\nOption B";
+
+            await LoadQuestionsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static IReadOnlyCollection<QuestionOptionDto> ParseOptions(string raw)
+    {
+        var lines = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var list = new List<QuestionOptionDto>();
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var isCorrect = line.StartsWith("*");
+            list.Add(new QuestionOptionDto
+            {
+                Text = isCorrect ? line.TrimStart('*').Trim() : line,
+                IsCorrect = isCorrect,
+                OrderIndex = i + 1
+            });
+        }
+
+        return list;
+    }
+}

@@ -1,0 +1,53 @@
+@inject QuizApiClient ApiClient
+@inject NavigationManager Navigation
+@inject JwtAuthenticationStateProvider AuthStateProvider
+
+<header class="topbar">
+    <div class="brand">
+        <div class="brand-mark">QS</div>
+        <div>
+            <strong>QuizSystem</strong>
+            <div class="subtle">Online Quiz & Examination</div>
+        </div>
+    </div>
+    <div class="topbar-actions">
+        <AuthorizeView>
+            <Authorized>
+                <button class="btn btn-ghost" @onclick="Logout">Logout</button>
+            </Authorized>
+            <NotAuthorized>
+                <a class="btn btn-primary" href="/login">Login</a>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</header>
+
+<nav class="nav-grid">
+    <a class="nav-link" href="/">Home</a>
+
+    <AuthorizeView Roles="@AppRoles.Admin">
+        <a class="nav-link" href="/admin/users">Admin: Users</a>
+        <a class="nav-link" href="/admin/overview">Admin: Overview</a>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="@AppRoles.Instructor">
+        <a class="nav-link" href="/instructor/questions">Instructor: Questions</a>
+        <a class="nav-link" href="/instructor/quizzes">Instructor: Quizzes</a>
+        <a class="nav-link" href="/instructor/analytics">Instructor: Analytics</a>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="@AppRoles.Student">
+        <a class="nav-link" href="/student/quizzes">Student: Assigned Quizzes</a>
+        <a class="nav-link" href="/student/results">Student: Results</a>
+        <a class="nav-link" href="/student/dashboard">Student: Dashboard</a>
+    </AuthorizeView>
+</nav>
+
+@code {
+    private async Task Logout()
+    {
+        await ApiClient.LogoutAsync();
+        AuthStateProvider.MarkUserAsLoggedOut();
+        Navigation.NavigateTo("/login", true);
+    }
+}
