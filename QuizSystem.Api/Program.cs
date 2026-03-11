@@ -48,7 +48,7 @@ builder.Services.AddSwaggerGen(options =>
     options.AddSecurityDefinition("Bearer", jwtScheme);
     options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
-        [new OpenApiSecuritySchemeReference("Bearer", document, string.Empty)] = Array.Empty<string>()
+        [new OpenApiSecuritySchemeReference("Bearer", document, string.Empty)] = new List<string>()
     });
 
     var xmlName = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
