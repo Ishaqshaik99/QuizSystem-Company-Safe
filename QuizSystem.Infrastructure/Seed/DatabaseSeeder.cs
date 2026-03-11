@@ -43,7 +43,7 @@ public static class DatabaseSeeder
         {
             var topic1 = new Topic { Id = Guid.NewGuid(), Name = "C# Fundamentals" };
             var topic2 = new Topic { Id = Guid.NewGuid(), Name = "Databases" };
-            await dbContext.Topics.AddRangeAsync(topic1, topic2, cancellationToken);
+            await dbContext.Topics.AddRangeAsync(new[] { topic1, topic2 }, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 

@@ -27,7 +27,7 @@ public class UserManagementService : IUserManagementService
         var dtos = new List<UserDto>(users.Count);
         foreach (var user in users)
         {
-            var roles = await _userManager.GetRolesAsync(user);
+            var roles = (await _userManager.GetRolesAsync(user)).ToList();
             dtos.Add(new UserDto
             {
                 Id = user.Id,

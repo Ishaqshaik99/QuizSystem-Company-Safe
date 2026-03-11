@@ -117,7 +117,7 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByIdAsync(userId.ToString())
             ?? throw new AppException("User not found.", HttpStatusCode.NotFound);
 
-        var roles = await _userManager.GetRolesAsync(user);
+        var roles = (await _userManager.GetRolesAsync(user)).ToList();
         var (accessToken, expiresAt) = await _tokenService.CreateAccessTokenAsync(user, roles);
 
         var replacement = new RefreshToken
@@ -173,7 +173,7 @@ public class AuthService : IAuthService
 
     private async Task<AuthResponse> BuildAuthResponseAsync(ApplicationUser user, string? ipAddress, CancellationToken cancellationToken)
     {
-        var roles = await _userManager.GetRolesAsync(user);
+        var roles = (await _userManager.GetRolesAsync(user)).ToList();
         var (accessToken, expiresAt) = await _tokenService.CreateAccessTokenAsync(user, roles);
 
         var refreshToken = new RefreshToken
