@@ -19,7 +19,19 @@ public static class DatabaseSeeder
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
 
-        await dbContext.Database.MigrateAsync(cancellationToken);
+        var hasMigrations = (await dbContext.Database.GetMigrationsAsync(cancellationToken)).Any();
+        if (hasMigrations)
+        {
+            await dbContext.Database.MigrateAsync(cancellationToken);
+        }
+        else
+        {
+            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var adminPassword = ResolveSeedPassword("<SET_PASSWORD>");
+        var instructorPassword = ResolveSeedPassword("<SET_PASSWORD>");
+        var studentPassword = ResolveSeedPassword("<SET_PASSWORD>");
 
         foreach (var role in AppRoles.All)
         {
@@ -29,10 +41,10 @@ public static class DatabaseSeeder
             }
         }
 
-        var admin = await EnsureUserAsync(userManager, "admin@quizsystem.local", "System Admin", "<SET_PASSWORD>", cancellationToken);
-        var instructor = await EnsureUserAsync(userManager, "instructor@quizsystem.local", "Demo Instructor", "<SET_PASSWORD>", cancellationToken);
-        var student1 = await EnsureUserAsync(userManager, "student1@quizsystem.local", "Demo Student One", "<SET_PASSWORD>", cancellationToken);
-        var student2 = await EnsureUserAsync(userManager, "student2@quizsystem.local", "Demo Student Two", "<SET_PASSWORD>", cancellationToken);
+        var admin = await EnsureUserAsync(userManager, "admin@quizsystem.local", "System Admin", adminPassword, cancellationToken);
+        var instructor = await EnsureUserAsync(userManager, "instructor@quizsystem.local", "Demo Instructor", instructorPassword, cancellationToken);
+        var student1 = await EnsureUserAsync(userManager, "student1@quizsystem.local", "Demo Student One", studentPassword, cancellationToken);
+        var student2 = await EnsureUserAsync(userManager, "student2@quizsystem.local", "Demo Student Two", studentPassword, cancellationToken);
 
         await EnsureRolesAsync(userManager, admin, AppRoles.Admin);
         await EnsureRolesAsync(userManager, instructor, AppRoles.Instructor);
@@ -48,6 +60,16 @@ public static class DatabaseSeeder
         }
 
         logger.LogInformation("Database seed completed.");
+    }
+
+    private static string ResolveSeedPassword(string configuredPassword)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPassword) || configuredPassword.Contains("<SET_PASSWORD>", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Passw0rd@123";
+        }
+
+        return configuredPassword;
     }
 
     private static async Task<ApplicationUser> EnsureUserAsync(
