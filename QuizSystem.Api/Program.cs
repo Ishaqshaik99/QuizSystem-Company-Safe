@@ -1,5 +1,5 @@
 using System.Reflection;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using QuizSystem.Api.Middleware;
 using QuizSystem.Infrastructure.DependencyInjection;
 using QuizSystem.Infrastructure.Seed;
@@ -42,18 +42,13 @@ builder.Services.AddSwaggerGen(options =>
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        Description = "Enter JWT token in the format: Bearer {token}",
-        Reference = new OpenApiReference
-        {
-            Type = ReferenceType.SecurityScheme,
-            Id = "Bearer"
-        }
+        Description = "Enter JWT token in the format: Bearer {token}"
     };
 
     options.AddSecurityDefinition("Bearer", jwtScheme);
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
-        [jwtScheme] = Array.Empty<string>()
+        [document.Components.SecuritySchemes["Bearer"]] = Array.Empty<string>()
     });
 
     var xmlName = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
