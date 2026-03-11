@@ -16,23 +16,63 @@ public class BrowserTokenStore
 
     public async Task<string?> GetAccessTokenAsync()
     {
-        return await _jsRuntime.InvokeAsync<string?>("quizAuth.get", AccessTokenKey);
+        try
+        {
+            return await _jsRuntime.InvokeAsync<string?>("quizAuth.get", AccessTokenKey);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (JSDisconnectedException)
+        {
+            return null;
+        }
     }
 
     public async Task<string?> GetRefreshTokenAsync()
     {
-        return await _jsRuntime.InvokeAsync<string?>("quizAuth.get", RefreshTokenKey);
+        try
+        {
+            return await _jsRuntime.InvokeAsync<string?>("quizAuth.get", RefreshTokenKey);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (JSDisconnectedException)
+        {
+            return null;
+        }
     }
 
     public async Task SetTokensAsync(string accessToken, string refreshToken)
     {
-        await _jsRuntime.InvokeVoidAsync("quizAuth.set", AccessTokenKey, accessToken);
-        await _jsRuntime.InvokeVoidAsync("quizAuth.set", RefreshTokenKey, refreshToken);
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("quizAuth.set", AccessTokenKey, accessToken);
+            await _jsRuntime.InvokeVoidAsync("quizAuth.set", RefreshTokenKey, refreshToken);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSDisconnectedException)
+        {
+        }
     }
 
     public async Task ClearAsync()
     {
-        await _jsRuntime.InvokeVoidAsync("quizAuth.remove", AccessTokenKey);
-        await _jsRuntime.InvokeVoidAsync("quizAuth.remove", RefreshTokenKey);
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("quizAuth.remove", AccessTokenKey);
+            await _jsRuntime.InvokeVoidAsync("quizAuth.remove", RefreshTokenKey);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSDisconnectedException)
+        {
+        }
     }
 }
